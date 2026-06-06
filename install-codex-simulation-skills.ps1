@@ -1,5 +1,7 @@
 param(
-  [switch]$SkipExisting
+  [switch]$SkipExisting,
+  [ValidateSet('git', 'download', 'auto')]
+  [string]$Method = 'git'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +12,36 @@ $Installer = Join-Path $SkillsDir '.system/skill-installer/scripts/install-skill
 
 if (-not (Test-Path $Installer)) {
   throw "Codex skill installer not found: $Installer. Open Codex once, then retry."
+}
+
+function Add-GitHubDesktopGitToPath {
+  if (Get-Command git -ErrorAction SilentlyContinue) {
+    return
+  }
+
+  $desktopRoot = Join-Path $env:LOCALAPPDATA 'GitHubDesktop'
+  if (-not (Test-Path $desktopRoot)) {
+    return
+  }
+
+  $gitExe = Get-ChildItem $desktopRoot -Recurse -Filter git.exe -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -like '*\resources\app\git\cmd\git.exe' } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if ($gitExe) {
+    $gitDir = Split-Path $gitExe.FullName -Parent
+    $env:Path = "$gitDir;$env:Path"
+    Write-Host "Using GitHub Desktop Git: $($gitExe.FullName)"
+  }
+}
+
+if ($Method -in @('git', 'auto')) {
+  Add-GitHubDesktopGitToPath
+}
+
+if ($Method -eq 'git' -and -not (Get-Command git -ErrorAction SilentlyContinue)) {
+  throw "Git method requested but git was not found. Install Git for Windows or GitHub Desktop, or rerun with -Method download."
 }
 
 function Install-SkillPath {
@@ -29,7 +61,7 @@ function Install-SkillPath {
     return
   }
 
-  $args = @($Installer, '--repo', $Repo, '--ref', $Ref, '--path', $Path, '--method', 'download')
+  $args = @($Installer, '--repo', $Repo, '--ref', $Ref, '--path', $Path, '--method', $Method)
   if ($Name) { $args += @('--name', $Name) }
   Write-Host "Install $destName from $Repo/$Path"
   & python @args
