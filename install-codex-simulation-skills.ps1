@@ -1,7 +1,5 @@
 param(
-  [switch]$SkipExisting,
-  [ValidateSet('git', 'download', 'auto')]
-  [string]$Method = 'git'
+  [switch]$SkipExisting
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,12 +34,10 @@ function Add-GitHubDesktopGitToPath {
   }
 }
 
-if ($Method -in @('git', 'auto')) {
-  Add-GitHubDesktopGitToPath
-}
+Add-GitHubDesktopGitToPath
 
-if ($Method -eq 'git' -and -not (Get-Command git -ErrorAction SilentlyContinue)) {
-  throw "Git method requested but git was not found. Install Git for Windows or GitHub Desktop, or rerun with -Method download."
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+  throw "Git was not found. Install Git for Windows or GitHub Desktop, then rerun this script."
 }
 
 function Install-SkillPath {
@@ -61,7 +57,7 @@ function Install-SkillPath {
     return
   }
 
-  $args = @($Installer, '--repo', $Repo, '--ref', $Ref, '--path', $Path, '--method', $Method)
+  $args = @($Installer, '--repo', $Repo, '--ref', $Ref, '--path', $Path, '--method', 'git')
   if ($Name) { $args += @('--name', $Name) }
   Write-Host "Install $destName from $Repo/$Path"
   & python @args

@@ -22,22 +22,16 @@ All checked skills have SKILL.md
 Total non-system skill dirs: 173
 ```
 
-## 为什么改用 Git 安装
+## 全局通用 Git 安装方法
 
-Codex 自带的 `skill-installer` 支持 `download`、`git` 和 `auto` 三种方式。旧脚本强制使用 `--method download`，它会为每个上游仓库下载完整 zip。这个方式对小仓库方便，但遇到较大的仿真仓库时容易失败。
+本仓库统一使用 Git 安装上游 skills。Git 方法适合小仓库和大型仓库，也适合安装途中断后用 `-SkipExisting` 继续补装。
 
-本次安装遇到的实际问题：
+### 1. 准备 Git
 
-- `wfy-op/codex-for-comsol-lumerical` 仓库 zip 很大，下载到约 376 MB 后出现 `IncompleteRead`。
-- 改用 GitHub Contents API 只递归下载子目录时，请求数太多，又触发匿名 GitHub API `403 rate limit exceeded`。
-- 安装器已经成功装过的 skill 都有 `SKILL.md`，所以可以反复用 `-SkipExisting` 续装。
+任选一种即可：
 
-最终解决方案：
-
-- 安装 GitHub Desktop。
-- 使用 GitHub Desktop 自带的 Git。
-- 将 Git 临时加入当前 PowerShell 的 `PATH`。
-- 用 `skill-installer --method git` 安装剩余 skill。
+- 安装 Git for Windows，并确保 `git` 在 PowerShell 中可用。
+- 安装 GitHub Desktop。安装脚本会自动寻找 GitHub Desktop 自带的 Git。
 
 GitHub Desktop 自带 Git 的常见路径：
 
@@ -45,9 +39,14 @@ GitHub Desktop 自带 Git 的常见路径：
 C:\Users\<user>\AppData\Local\GitHubDesktop\app-*\resources\app\git\cmd\git.exe
 ```
 
-本仓库的安装脚本现在默认使用 `git` 方法，并会自动寻找 GitHub Desktop 自带的 Git。
+手动检查 GitHub Desktop 自带 Git：
 
-## 一键安装
+```powershell
+Get-ChildItem "$env:LOCALAPPDATA\GitHubDesktop" -Recurse -Filter git.exe |
+  Select-Object -First 10 FullName
+```
+
+### 2. 准备 Codex skill-installer
 
 先确保 Codex 已运行过一次，并且系统 skill-installer 已存在：
 
@@ -55,47 +54,37 @@ C:\Users\<user>\AppData\Local\GitHubDesktop\app-*\resources\app\git\cmd\git.exe
 %USERPROFILE%\.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py
 ```
 
-Windows PowerShell：
+### 3. 一键安装或续装
+
+在本仓库根目录运行：
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
 .\install-codex-simulation-skills.ps1 -SkipExisting
 ```
 
-脚本默认使用：
-
-```powershell
-.\install-codex-simulation-skills.ps1 -SkipExisting -Method git
-```
-
-可选安装方式：
-
-```powershell
-.\install-codex-simulation-skills.ps1 -SkipExisting -Method git
-.\install-codex-simulation-skills.ps1 -SkipExisting -Method download
-.\install-codex-simulation-skills.ps1 -SkipExisting -Method auto
-```
-
-建议优先使用 `git`。`download` 适合小仓库，但对大型上游仓库更容易断流。`auto` 由 Codex skill-installer 自己决定流程。
+脚本固定使用 `skill-installer --method git`。如果某些 skill 已经安装过，`-SkipExisting` 会跳过已有目录，继续安装缺失项。
 
 安装完成后重启 Codex，让新 skills 被加载。
 
-## 手动 Git 安装方法
+### 4. 单个 skill 手动安装模板
 
-如果需要单独安装或补装某个 skill，可以直接调用系统安装器。
-
-先临时加入 GitHub Desktop 的 Git：
+需要单独补装某个 skill 时，可以直接调用系统安装器：
 
 ```powershell
-$gitCmd = Get-ChildItem "$env:LOCALAPPDATA\GitHubDesktop" -Recurse -Filter git.exe |
-  Where-Object { $_.FullName -like '*\resources\app\git\cmd\git.exe' } |
-  Sort-Object LastWriteTime -Descending |
-  Select-Object -First 1
+$installer = Join-Path $HOME '.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py'
 
-$env:Path = "$(Split-Path $gitCmd.FullName -Parent);$env:Path"
+python $installer `
+  --repo owner/repo `
+  --ref main `
+  --path path/to/skill `
+  --name optional-skill-name `
+  --method git
 ```
 
-再执行安装器：
+如果目标目录名应直接取路径最后一段，可以省略 `--name`。
+
+示例：
 
 ```powershell
 $installer = Join-Path $HOME '.codex\skills\.system\skill-installer\scripts\install-skill-from-github.py'
@@ -113,6 +102,17 @@ python $installer `
 ```powershell
 Test-Path "$HOME\.codex\skills\wfy-comsol-multiphysics\SKILL.md"
 ```
+
+## 为什么统一使用 Git
+
+本组合涉及多个上游仓库，其中部分仿真仓库体积较大。Git 安装方式更适合：
+
+- 避免完整仓库 zip 下载过程中的断流。
+- 避免递归调用 GitHub Contents API 导致匿名 API 限流。
+- 支持中断后重跑，并通过 `-SkipExisting` 继续补装。
+- 复用 GitHub Desktop 或 Git for Windows 的凭据和网络配置。
+
+本仓库不再维护其他安装路径说明。遇到安装问题时，优先修复本机 Git 可用性，再重新运行安装脚本。
 
 ## Skill 组合总览
 
@@ -176,27 +176,26 @@ Get-ChildItem "$env:LOCALAPPDATA\GitHubDesktop" -Recurse -Filter git.exe |
   Select-Object -First 10 FullName
 ```
 
-### download 方式卡住或断流
-
-改用：
-
-```powershell
-.\install-codex-simulation-skills.ps1 -SkipExisting -Method git
-```
-
 ### 已安装一部分后中断
 
 直接重跑：
 
 ```powershell
-.\install-codex-simulation-skills.ps1 -SkipExisting -Method git
+.\install-codex-simulation-skills.ps1 -SkipExisting
 ```
 
 脚本会跳过已有目录。每个有效 skill 目录必须包含 `SKILL.md`。
 
-### GitHub API 403 rate limit
+### GitHub 网络或凭据问题
 
-这是匿名 API 限流。避免递归调用 GitHub Contents API；优先用 `git` 方法安装。
+先确认普通 Git 命令可用：
+
+```powershell
+git --version
+git ls-remote https://github.com/tya34/skills.git
+```
+
+如果访问私有仓库或遇到认证问题，先在 GitHub Desktop 或 Git Credential Manager 中完成登录，再重新运行安装脚本。
 
 ## 安全建议
 
